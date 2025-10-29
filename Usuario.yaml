@@ -1,0 +1,868 @@
+openapi: 3.0.3
+info:
+  description: |
+    API dedicada a la gestión de usuarios y artistas dentro de la plataforma musical UnderSound.
+    Incluye registro, autenticación, gestión de perfiles y favoritos de discos, merchandising y playlists.
+  title: Microservicio de Usuarios - UnderSound
+  version: 1.0.0
+servers:
+- description: Servidor local de desarrollo
+  url: http://localhost:8080
+- description: Servidor de producción
+  url: https://api.undersound.com
+
+tags:
+- name: Autenticación
+  description: Endpoints para registro, login y logout
+- name: Gestión de Perfil
+  description: Endpoints para consultar y actualizar perfiles de usuarios y artistas
+- name: Favoritos - Discos
+  description: Gestión de discos marcados como favoritos
+- name: Favoritos - Merchandising
+  description: Gestión de productos de merchandising favoritos
+- name: Favoritos - Playlists
+  description: Creación y gestión de playlists personalizadas
+
+paths:
+  # ==================== AUTENTICACIÓN ====================
+  /auth/register:
+    post:
+      summary: Registrar nuevo usuario o artista
+      description: |
+        Crea una cuenta nueva en el sistema. 
+        - Para usuarios normales: requiere username, email, password y tipo_usuario='usuario'
+        - Para artistas: además requiere nombre_banda
+      operationId: registerUser
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegisterInput'
+            examples:
+              usuario:
+                summary: Registro de usuario normal
+                value:
+                  username: "fan_music"
+                  email: "fan@example.com"
+                  password: "securepass123"
+                  tipo_usuario: "usuario"
+              artista:
+                summary: Registro de artista
+                value:
+                  username: "rockstar"
+                  email: "artist@example.com"
+                  password: "securepass123"
+                  tipo_usuario: "artista"
+                  nombre_banda: "The Rockers"
+      responses:
+        '201':
+          description: Usuario registrado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Datos inválidos o email ya registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor
+
+  /auth/login:
+    post:
+      summary: Iniciar sesión
+      description: Autentica un usuario mediante email y contraseña. Devuelve un token JWT y los datos del perfil.
+      operationId: loginUser
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginInput'
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLoginResponse'
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: user_id=abc123; Path=/; HttpOnly; Max-Age=86400
+        '401':
+          description: Credenciales inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Usuario no encontrado
+        '500':
+          description: Error interno del servidor
+
+  /logout:
+    post:
+      summary: Cerrar sesión
+      description: Elimina la sesión activa del usuario (cookie) y redirige al login
+      operationId: logoutUser
+      tags:
+        - Autenticación
+      responses:
+        '303':
+          description: Sesión cerrada, redirige a /Usuario/logInUsuario/login.html
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /Usuario/logInUsuario/login.html
+
+  # ==================== GESTIÓN DE PERFIL ====================
+  /Usuario/PerfilUsuario:
+    get:
+      summary: Ver página de perfil del usuario autenticado
+      description: Renderiza la página HTML del perfil del usuario con sus datos actuales
+      operationId: getPerfilUsuario
+      tags:
+        - Gestión de Perfil
+      security:
+        - CookieAuth: []
+      responses:
+        '200':
+          description: Página de perfil renderizada
+          content:
+            text/html:
+              schema:
+                type: string
+        '302':
+          description: Redirige al login si no hay sesión activa
+        '404':
+          description: Usuario no encontrado
+        '500':
+          description: Error interno
+
+  /getUserProfile/{user_id}:
+    get:
+      summary: Obtener perfil público de un usuario
+      description: Consulta el perfil de cualquier usuario por su ID
+      operationId: getUserProfileById
+      tags:
+        - Gestión de Perfil
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: Identificador único del usuario
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Perfil del usuario
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Usuario no encontrado
+        '500':
+          description: Error interno
+
+  /getArtistProfile/{artist_id}:
+    get:
+      summary: Obtener perfil público de un artista
+      description: Consulta el perfil de un artista por su ID
+      operationId: getArtistProfileById
+      tags:
+        - Gestión de Perfil
+      parameters:
+        - name: artist_id
+          in: path
+          required: true
+          description: Identificador único del artista
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Perfil del artista
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Artista no encontrado
+        '500':
+          description: Error interno
+
+  /UpdateProfileUser/{user_id}:
+    post:
+      summary: Actualizar perfil de usuario
+      description: Permite modificar el nombre de usuario
+      operationId: updateUserProfile
+      tags:
+        - Gestión de Perfil
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - username
+              properties:
+                username:
+                  type: string
+                  description: Nuevo nombre de usuario
+      responses:
+        '200':
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Nombre de usuario actualizado correctamente."
+        '403':
+          description: No autorizado
+        '404':
+          description: Usuario no encontrado
+        '500':
+          description: Error interno
+
+  /UpdateProfileUserArtist/{user_id}:
+    post:
+      summary: Actualizar perfil de artista
+      description: Permite modificar el nombre de usuario y nombre de banda
+      operationId: updateArtistProfile
+      tags:
+        - Gestión de Perfil
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - username
+                - bandname
+              properties:
+                username:
+                  type: string
+                bandname:
+                  type: string
+      responses:
+        '200':
+          description: Perfil de artista actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Perfil de artista actualizado correctamente."
+        '403':
+          description: No autorizado
+        '404':
+          description: Artista no encontrado
+        '500':
+          description: Error interno
+
+  # ==================== FAVORITOS - DISCOS ====================
+  /Usuario/PerfilUsuario/discos:
+    get:
+      summary: Listar discos favoritos
+      description: Obtiene todos los discos marcados como favoritos por el usuario
+      operationId: getDiscosFavoritos
+      tags:
+        - Favoritos - Discos
+      security:
+        - CookieAuth: []
+      responses:
+        '200':
+          description: Lista de discos favoritos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DiscoFavorito'
+        '401':
+          description: No autenticado
+        '500':
+          description: Error interno
+
+    post:
+      summary: Añadir disco a favoritos
+      description: Marca un disco como favorito del usuario
+      operationId: addDiscoFavorito
+      tags:
+        - Favoritos - Discos
+      security:
+        - CookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDiscoFavoritoInput'
+      responses:
+        '201':
+          description: Disco añadido a favoritos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Disco añadido a favoritos"
+        '400':
+          description: El disco ya está en favoritos
+        '401':
+          description: No autenticado
+        '500':
+          description: Error interno
+
+  /Usuario/PerfilUsuario/discos/{disco_id}:
+    delete:
+      summary: Eliminar disco de favoritos
+      description: Quita un disco de la lista de favoritos
+      operationId: removeDiscoFavorito
+      tags:
+        - Favoritos - Discos
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: disco_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID del disco a eliminar
+      responses:
+        '200':
+          description: Disco eliminado de favoritos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Disco eliminado de favoritos"
+        '401':
+          description: No autenticado
+        '404':
+          description: Disco no encontrado en favoritos
+        '500':
+          description: Error interno
+
+  # ==================== FAVORITOS - MERCHANDISING ====================
+  /Usuario/PerfilUsuario/merch:
+    get:
+      summary: Listar merchandising favorito
+      description: Obtiene todos los productos de merchandising marcados como favoritos
+      operationId: getMerchFavoritos
+      tags:
+        - Favoritos - Merchandising
+      security:
+        - CookieAuth: []
+      responses:
+        '200':
+          description: Lista de merchandising favorito
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MerchFavorito'
+        '401':
+          description: No autenticado
+        '500':
+          description: Error interno
+
+    post:
+      summary: Añadir merchandising a favoritos
+      description: Marca un producto como favorito del usuario
+      operationId: addMerchFavorito
+      tags:
+        - Favoritos - Merchandising
+      security:
+        - CookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMerchFavoritoInput'
+      responses:
+        '201':
+          description: Merchandising añadido a favoritos
+        '400':
+          description: El producto ya está en favoritos
+        '401':
+          description: No autenticado
+        '500':
+          description: Error interno
+
+  /Usuario/PerfilUsuario/merch/{merch_id}:
+    delete:
+      summary: Eliminar merchandising de favoritos
+      description: Quita un producto de la lista de favoritos
+      operationId: removeMerchFavorito
+      tags:
+        - Favoritos - Merchandising
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: merch_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Merchandising eliminado de favoritos
+        '401':
+          description: No autenticado
+        '404':
+          description: Producto no encontrado en favoritos
+        '500':
+          description: Error interno
+
+  # ==================== FAVORITOS - PLAYLISTS ====================
+  /Usuario/PerfilUsuario/playlists:
+    get:
+      summary: Listar playlists del usuario
+      description: Obtiene todas las playlists creadas por el usuario
+      operationId: getPlaylists
+      tags:
+        - Favoritos - Playlists
+      security:
+        - CookieAuth: []
+      responses:
+        '200':
+          description: Lista de playlists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Playlist'
+        '401':
+          description: No autenticado
+        '500':
+          description: Error interno
+
+    post:
+      summary: Crear nueva playlist
+      description: Crea una playlist personalizada para el usuario
+      operationId: createPlaylist
+      tags:
+        - Favoritos - Playlists
+      security:
+        - CookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlaylistInput'
+      responses:
+        '201':
+          description: Playlist creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Playlist'
+        '400':
+          description: Datos inválidos
+        '401':
+          description: No autenticado
+        '500':
+          description: Error interno
+
+  /Usuario/PerfilUsuario/playlists/{playlist_id}:
+    get:
+      summary: Ver detalles de una playlist
+      description: Obtiene información completa de una playlist incluyendo sus canciones
+      operationId: getPlaylistDetails
+      tags:
+        - Favoritos - Playlists
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: playlist_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalles de la playlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistDetalle'
+        '401':
+          description: No autenticado
+        '404':
+          description: Playlist no encontrada
+        '500':
+          description: Error interno
+
+    delete:
+      summary: Eliminar playlist
+      description: Elimina una playlist del usuario
+      operationId: deletePlaylist
+      tags:
+        - Favoritos - Playlists
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: playlist_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Playlist eliminada
+        '401':
+          description: No autenticado
+        '404':
+          description: Playlist no encontrada
+        '500':
+          description: Error interno
+
+  /Usuario/PerfilUsuario/playlists/{playlist_id}/canciones:
+    post:
+      summary: Añadir canción a playlist
+      description: Agrega una canción a una playlist existente
+      operationId: addCancionToPlaylist
+      tags:
+        - Favoritos - Playlists
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: playlist_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCancionToPlaylistInput'
+      responses:
+        '201':
+          description: Canción añadida
+        '400':
+          description: La canción ya está en la playlist
+        '401':
+          description: No autenticado
+        '404':
+          description: Playlist no encontrada
+        '500':
+          description: Error interno
+
+  /Usuario/PerfilUsuario/playlists/{playlist_id}/canciones/{cancion_id}:
+    delete:
+      summary: Eliminar canción de playlist
+      description: Quita una canción de una playlist
+      operationId: removeCancionFromPlaylist
+      tags:
+        - Favoritos - Playlists
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: playlist_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: cancion_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Canción eliminada de la playlist
+        '401':
+          description: No autenticado
+        '404':
+          description: Playlist o canción no encontrada
+        '500':
+          description: Error interno
+
+components:
+  schemas:
+    UserRegisterInput:
+      type: object
+      required:
+        - username
+        - email
+        - password
+        - tipo_usuario
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Nombre de usuario único
+          example: "rock_fan_2024"
+        email:
+          type: string
+          format: email
+          description: Correo electrónico único
+          example: "usuario@example.com"
+        password:
+          type: string
+          format: password
+          minLength: 6
+          description: Contraseña (mínimo 6 caracteres)
+        tipo_usuario:
+          type: string
+          enum: [usuario, artista]
+          description: Tipo de cuenta a crear
+        nombre_banda:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: Nombre de la banda (requerido solo para artistas)
+          example: "The Rockers"
+
+    UserLoginInput:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "usuario@example.com"
+        password:
+          type: string
+          format: password
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UID de Firebase
+          example: "0W9IQ2TEGtbv5mcPuKt4LIgz0822"
+        username:
+          type: string
+          example: "rock_fan_2024"
+        email:
+          type: string
+          format: email
+          example: "usuario@example.com"
+        tipo_usuario:
+          type: string
+          enum: [usuario, artista]
+        nombre_banda:
+          type: string
+          nullable: true
+          example: "The Rockers"
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL de la imagen de perfil
+
+    AuthLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Token JWT válido por 24 horas
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
+    DiscoFavorito:
+      type: object
+      properties:
+        id:
+          type: string
+        titulo:
+          type: string
+          example: "Abbey Road"
+        artista:
+          type: string
+          example: "The Beatles"
+        imagen_url:
+          type: string
+          format: uri
+        fecha_agregado:
+          type: string
+          format: date-time
+
+    AddDiscoFavoritoInput:
+      type: object
+      required:
+        - disco_id
+      properties:
+        disco_id:
+          type: string
+          description: ID del disco a marcar como favorito
+
+    MerchFavorito:
+      type: object
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+          example: "Camiseta Tour 2024"
+        tipo:
+          type: string
+          example: "Camiseta"
+        imagen_url:
+          type: string
+          format: uri
+        precio:
+          type: number
+          format: float
+          example: 25.99
+        fecha_agregado:
+          type: string
+          format: date-time
+
+    AddMerchFavoritoInput:
+      type: object
+      required:
+        - merch_id
+      properties:
+        merch_id:
+          type: string
+
+    Playlist:
+      type: object
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+          example: "Mi Playlist de Rock"
+        descripcion:
+          type: string
+          example: "Las mejores canciones de rock"
+        imagen_url:
+          type: string
+          format: uri
+          nullable: true
+        fecha_creacion:
+          type: string
+          format: date-time
+        cantidad_canciones:
+          type: integer
+          example: 15
+
+    PlaylistDetalle:
+      allOf:
+        - $ref: '#/components/schemas/Playlist'
+        - type: object
+          properties:
+            canciones:
+              type: array
+              items:
+                $ref: '#/components/schemas/Cancion'
+
+    Cancion:
+      type: object
+      properties:
+        id:
+          type: string
+        titulo:
+          type: string
+          example: "Bohemian Rhapsody"
+        artista:
+          type: string
+          example: "Queen"
+        duracion:
+          type: integer
+          description: Duración en segundos
+          example: 354
+        album:
+          type: string
+          example: "A Night at the Opera"
+        url_audio:
+          type: string
+          format: uri
+
+    CreatePlaylistInput:
+      type: object
+      required:
+        - nombre
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 100
+        descripcion:
+          type: string
+          maxLength: 500
+        imagen_url:
+          type: string
+          format: uri
+
+    AddCancionToPlaylistInput:
+      type: object
+      required:
+        - cancion_id
+      properties:
+        cancion_id:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Descripción del error
+          example: "El correo electrónico ya está registrado."
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtenido en /auth/login
+    
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: user_id
+      description: Cookie de sesión establecida automáticamente al hacer login
